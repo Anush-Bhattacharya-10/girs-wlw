@@ -27,7 +27,7 @@ export async function POST(request) {
             })
             .join('\n');
 
-        // 3. System Instruction for Gemini's persona
+        // 3. System Instruction for Groq's persona
         const systemInstruction = `You are "The Sapphic Scribbler," an elite, witty, and deeply insightful Sapphic fanfiction author. 
 Your writing style is highly engaging, rich with emotional nuance, character chemistry, and self-aware romance community tropes. 
 You masterfully balance humor, dramatic tension, and genuine vulnerability. Write a compelling, stylized short story based on the user's parameters. 
@@ -50,50 +50,55 @@ Level ${spiceLevel}/5 - ${spiceMapping[spiceLevel] || spiceMapping[1]}
 
 Ensure the narrative directly satisfies the selected dynamic, maintains a thrilling pace, and leans deeply into beloved tropes like intense staring, banter, and profound mutual understanding.`;
 
-        const apiKey = process.env.GEMINI_API_KEY;
+        // Change variable to fetch GROQ API Key
+        const apiKey = process.env.GROQ_API_KEY;
         if (!apiKey) {
-            return NextResponse.json({ error: "Gemini API Key is missing on the server environment." }, { status: 500 });
+            return NextResponse.json({ error: "Groq API Key is missing on the server environment." }, { status: 500 });
         }
 
-        // 5. Targeting the ultra-fast, free-tier friendly Gemini 2.5 Flash
-        const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+        // 5. Targeting the official Groq completions endpoint
+        const url = "https://api.groq.com/openai/v1/chat/completions";
 
-        const geminiResponse = await fetch(url, {
+        const groqResponse = await fetch(url, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "x-goog-api-key": apiKey
+                "Authorization": `Bearer ${apiKey}` // Groq uses standard Bearer tokens
             },
             body: JSON.stringify({
-                contents: [
+                // Using llama-3.3-70b-versatile for exceptional, highly descriptive creative writing tasks
+                model: "llama-3.3-70b-versatile",
+                messages: [
                     {
-                        parts: [{ text: userPrompt }]
+                        role: "system",
+                        content: systemInstruction
+                    },
+                    {
+                        role: "user",
+                        content: userPrompt
                     }
                 ],
-                systemInstruction: {
-                    parts: [{ text: systemInstruction }]
-                },
-                generationConfig: {
-                    temperature: 0.9
-                }
+                temperature: 0.85
             })
         });
 
-        if (!geminiResponse.ok) {
-            const errorData = await geminiResponse.json().catch(() => ({}));
-            const status = geminiResponse.status;
+        if (!groqResponse.ok) {
+            const errorData = await groqResponse.json().catch(() => ({}));
+            const status = groqResponse.status;
 
             if (status === 429) {
-                return NextResponse.json({ error: "The free tier is breathing heavy! Rate limit hit. Take a breath and click generate again." }, { status: 429 });
+                return NextResponse.json({ error: "Groq's servers are humming too fast! Rate limit hit. Give it a brief pause and click generate again." }, { status: 429 });
             }
-            return NextResponse.json({ error: errorData?.error?.message || `Gemini API responded with status ${status}` }, { status });
+            return NextResponse.json({ error: errorData?.error?.message || `Groq API responded with status ${status}` }, { status });
         }
 
-        const data = await geminiResponse.json();
-        const generatedStory = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const data = await groqResponse.json();
+
+        // Extract text using OpenAI-compatible parsing paths
+        const generatedStory = data?.choices?.[0]?.message?.content;
 
         if (!generatedStory) {
-            return NextResponse.json({ error: "Gemini returned an empty response. Try tweaking your inputs." }, { status: 500 });
+            return NextResponse.json({ error: "Groq returned an empty response. Try tweaking your inputs." }, { status: 500 });
         }
 
         return NextResponse.json({ story: generatedStory });
